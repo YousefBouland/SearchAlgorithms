@@ -1,5 +1,6 @@
 import collections
 from collections import defaultdict
+import heapq
 import time
 
 # return false if target is found, or true otherwise
@@ -26,22 +27,15 @@ def bfs_explore(year, x, y, target_year_location, current_path, bfs_queue, visit
 
 
 # BFS
-# Cost: each move to any 8 neighbouring directions has cost 1, jump through any number of years is cost 1
+# Cost: each move to any 8 neighbouring directions has cost 1, jump through any number of years is cost 1.
 # Algorithm: Using a Queue, put all possible next moves (neighbouring 8 directions, as long as not out of index, and
 #   all possible jaunts channels, x-y-year, from the current location) to the queue. Before adding to the queue check
-#   if current action will result in reaching the goal, if so then return there.
+#   if current action will result in reaching the goal, if so then return it without adding to queue.
+#   Path format in queue: each path in the queue is an array of tuples, where a tuple is a time-year-location in the
+#   format of (year, x, y)
+# Visited Set: set of (year, x, y) visited tuples
 
-def bfs(initial_year_location, target_year_location, channels):
-    if initial_year_location == target_year_location:
-        writeoutput(True, BFS_NAME, [initial_year_location])
-        return
-    visited = set()
-    bfs_queue = collections.deque()
-    path = [ initial_year_location ]
-    bfs_queue.append(path)
-
-    # print(bfs_queue)
-
+def bfs(bfs_queue, target_year_location, channels, visited):
     while bfs_queue:
         current_path = bfs_queue.popleft()
         current_year_location = current_path[-1]
@@ -78,7 +72,134 @@ def bfs(initial_year_location, target_year_location, channels):
     # If not able to reach goal then return failure output
     writeoutput(False)
 
+def ucs_explore(step_cost, year, x, y, current_cost_path, ucs_queue, visited):
+    global entry_count
+    x = str(x)
+    y = str(y)
+    year = str(year)
+    step_cost = str(step_cost)
+    # step_cost = str(step_cost)
+    if (year, x, y) not in visited and (0 <= int(x) < int(W)) and (0 <= int(y) < int(H)):
+        # current_cost = current_cost_path[0]  # grab total cost
+
+        total_cost = current_cost_path[0] # grab total cost
+        entry_count = entry_count + 1 # grab entry count
+        current_path = current_cost_path[2] # grab path
+
+        new_path = list(current_path)
+        new_step = (step_cost, (year, x, y))
+        new_total_cost = str(int(total_cost) + int(step_cost))
+        new_path.append(new_step)
+
+        heapq.heappush(ucs_queue, (int(new_total_cost), entry_count, new_path))
+
+# UCS
+# Cost: Orthogonal moves have cost 10, diagonal cost 14, and jaunts cost number of years traveled
+# Algorithm: Using a priority queue, put all possible next moves with their respective costs, as long as not out of
+# index, and all possible jaunts channels, x-y-year from the current location, to the queue. Only after popping from
+# queue can we return the path if it includes the goal
+# Path format in priority queue: each path in queue is a tuple (total_cost, [array of tuples for this path] where the
+# tuples in the array are of the format (current_step_cost, (year, x, y))
+# Visited Set: set of (year, x, y) visited tuples
+def ucs(ucs_queue, target_year_location, channels, visited):
+    diagonal_cost = 14
+    orthogonal_cost = 10
+
+    while ucs_queue:
+        current_cost_path = heapq.heappop(ucs_queue)
+
+        current_path = current_cost_path[2] # grab path
+        current_cost_step = current_path[-1]
+
+        step_cost = current_cost_step[0] # grab step cost
+        year_location = current_cost_step [1] # grab year location tuple
+        if year_location not in visited:
+
+            if year_location == target_year_location:
+                writeoutput(True, UCS_NAME, current_path)
+                return
+
+            visited.add(year_location)
+            # print("visited so far: " + str(visited))
+            # print("target_year_location= " + str(target_year_location))
+            # return
+            year = year_location[0]
+            x = year_location[1]
+            y = year_location[2]
+
+            ucs_explore(orthogonal_cost, year, int(x) - 1, y, current_cost_path, ucs_queue, visited)
+            ucs_explore(orthogonal_cost, year, int(x) + 1, y, current_cost_path, ucs_queue, visited)
+            ucs_explore(orthogonal_cost, year, x, int(y) - 1, current_cost_path, ucs_queue, visited)
+            ucs_explore(orthogonal_cost, year, x, int(y) + 1, current_cost_path, ucs_queue, visited)
+
+            ucs_explore(diagonal_cost, year, int(x) - 1, int(y) - 1, current_cost_path, ucs_queue, visited)
+            ucs_explore(diagonal_cost, year, int(x) + 1, int(y) + 1, current_cost_path, ucs_queue, visited)
+            ucs_explore(diagonal_cost, year, int(x) - 1, int(y) + 1, current_cost_path, ucs_queue, visited)
+            ucs_explore(diagonal_cost, year, int(x) + 1, int(y) - 1, current_cost_path, ucs_queue, visited)
+
+            if year in channels:
+                for year_location in channels[year]:
+                    if x == year_location[1] and y == year_location[2]:
+                        ucs_explore(abs(int(year) - int(year_location[0])), year_location[0], x, y, current_cost_path,
+                                    ucs_queue, visited)
+
+    # If not able to reach goal then return failure output
+    writeoutput(False)
+
+
+
+        # current_cost = current_cost_path[0] # grab total cost
+        # current_path = current_cost_path[1] # grab path
+        # print("current total cost is: " + str(current_cost))
+        # print("current path tuple is: " + str(current_path) + "\n")
+        #
+        # current_cost_step = current_path[0] # grab one step, i.e. cost_step from path
+        # step_cost = current_cost_step[0] # grab step cost
+        # year_location = current_cost_step [1] # grab year location tuple
+        # print("current step cost: " + str(step_cost) + ", year location is: " + str(year_location))
+
+
+def search(algorithm, initial_year_location, target_year_location, channels):
+    # if initial_year_location == target_year_location:
+    #     writeoutput(True, algorithm, [initial_year_location])
+    #     return
+
+    visited = set()
+
+    if algorithm == BFS_NAME:
+        bfs_queue = collections.deque()
+        path = [initial_year_location]
+
+        if initial_year_location == target_year_location:
+            writeoutput(True, algorithm, path)
+            return
+
+        bfs_queue.append(path)
+        bfs(bfs_queue, target_year_location, channels, visited)
+
+    if algorithm == UCS_NAME:
+        ucs_queue = []
+        # path_cost format: [(step cost, (year,x,y)), (step cost, (year,x,y)).....]
+        path_cost = [('0', initial_year_location)]
+        # push on p queue an element of this format:
+        # (path_total_cost, [(step_cost, (year,x,y)), (step_cost, (year,x,y))...])
+        # popping from the queue will pop the path with the lowest total cost
+
+        if initial_year_location == target_year_location:
+            writeoutput(True, algorithm, path_cost)
+            return
+
+        # First value (total cost) in the tuple pushed to heap must be integer so that the ordering of cost is correct
+        # use an entry count to prevent comparisons with equal total costs
+        heapq.heappush(ucs_queue, (0, entry_count, path_cost))
+        ucs(ucs_queue, target_year_location, channels, visited)
+
+
 # input_values [algorithm, W, H, initial_year_location, target_year_location, channels]
+# algorithm: string for algorithm name
+# W, H: string values for width and height of grid
+# initial_year_location, target_year_location: tuples of the form year_location (year, x, y)
+# channels: dict mapping each year to a potential year_location jump
 def readinput():
     input_path = 'input.txt'
     input_file = open(input_path, 'r')
@@ -107,11 +228,13 @@ def readinput():
     input_file.close()
     return input_values
 
+
 def writeoutput(solution_exists, algorithm=None, solution_path=None):
     output_path = 'output.txt'
     output_file = open(output_path, 'w')
 
     if not solution_exists:
+        print("Failing")
         output_file.write('FAIL')
         output_file.close()
         return
@@ -132,26 +255,29 @@ def writeoutput(solution_exists, algorithm=None, solution_path=None):
         for i in range(1, len(solution_path)):
             output_file.write(solution_path[i][0] + " " + solution_path[i][1] + " " + solution_path[i][2] + " 1\n")
 
+    if algorithm == "UCS":
+        total_cost = 0
+        steps_array = []
+        print("solution path length is: " + str(len(solution_path)))
+        print("solution path: " + str(solution_path))
+        for i in range(len(solution_path)):
+            current_cost_step = solution_path[i]
+            step_cost = current_cost_step[0]  # grab step cost
+            year_location = current_cost_step[1]  # grab year location tuple
+
+            total_cost += int(step_cost)
+
+            steps_array.append((step_cost, year_location))
+
+        output_file.write(str(total_cost) + '\n')
+        output_file.write(str(len(solution_path)) + '\n')
+
+        for i in range (len(solution_path)):
+            output_file.write(solution_path[i][1][0] + " " + solution_path[i][1][1] + " " + solution_path[i][1][2] +
+                              " " + str(solution_path[i][0]) + "\n")
+
     output_file.close()
     # output_file.write('My output is:\n')
-
-
-# output_path = 'output.txt'
-# output_file = open(output_path, 'w')
-#
-# output_file.write('My output is:\n')
-#
-# output_file.write("Algorithm: " + file_content_array[0]);
-# output_file.write("W H: " + file_content_array[1]);
-# output_file.write("Initial year-location: " + file_content_array[2]);
-# output_file.write("Target year-location: " + file_content_array[3]);
-# output_file.write("N (number of channels): " + file_content_array[4]);
-#
-# for i in range(5, 5+int(file_content_array[4])):
-#     output_file.write("Channel " + str(i-4) + ": " + file_content_array[i]);
-#
-# input_file.close()
-# output_file.close()
 
 
 initial_year_location = ()
@@ -161,12 +287,13 @@ H = 0
 BFS_NAME = "BFS"
 UCS_NAME = "UCS"
 A_STAR_NAME = "A*"
+entry_count = 0
 
 def main():
     input_values = readinput()
 
     # Inputs
-    algorithm = input_values[0]
+    algorithm = input_values[0].rstrip()
     global W
     global H
     global initial_year_location
@@ -174,46 +301,22 @@ def main():
     global BFS_NAME
     global UCS_NAME
     global A_STAR_NAME
+    global entry_count
     W = input_values[1]
     H = input_values[2]
     initial_year_location = input_values[3]
     target_year_location = input_values[4]
     channels = input_values[5]
 
-    # print("W= " + W + ", " + "H= " + H + ", " + "initial_year_location= " + str(initial_year_location) + ", " + "target_year_location= " + str(target_year_location) + ", " + "channels= " + str(channels))
+    # print("W= " + W + ", " + "H= " + H + ", " + "initial_year_location= " + str(initial_year_location)
+    # + ", " + "target_year_location= " + str(target_year_location) + ", " + "channels= " + str(channels))
 
     # if initial_year_location == target_year_location: print("FOUND  :format this to proper output")
     start = time.process_time()
-    # your code here
 
-    bfs(initial_year_location, target_year_location, channels)
+    # bfs(initial_year_location, target_year_location, channels)
+    search(algorithm, initial_year_location, target_year_location, channels)
     print(time.process_time() - start)
-
-
-
-# TODO put the following in two methods that grab the data from the input file and outputs to an output file
-# input file, and another method that writes out the output.txt
-# input_path = 'input.txt'
-# input_file = open(input_path, 'r')
-# file_content_array = input_file.readlines()
-#
-# output_path = 'output.txt'
-# output_file = open(output_path, 'w')
-#
-# output_file.write('My output is:\n')
-#
-# output_file.write("Algorithm: " + file_content_array[0]);
-# output_file.write("W H: " + file_content_array[1]);
-# output_file.write("Initial year-location: " + file_content_array[2]);
-# output_file.write("Target year-location: " + file_content_array[3]);
-# output_file.write("N (number of channels): " + file_content_array[4]);
-#
-# for i in range(5, 5+int(file_content_array[4])):
-#     output_file.write("Channel " + str(i-4) + ": " + file_content_array[i]);
-#
-# input_file.close()
-# output_file.close()
-#
 
 if __name__ == "__main__":
     main()
